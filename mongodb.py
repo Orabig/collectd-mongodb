@@ -60,6 +60,8 @@ class MongoDB(object):
         version = server_status['version']
         at_least_2_4 = V(version) >= V('2.4.0')
 
+        self.submit('uptime','value', server_status['uptime'])
+
         # operations
         for k, v in server_status['opcounters'].items():
             self.submit('total_operations', k, v)
