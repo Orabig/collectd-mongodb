@@ -39,7 +39,7 @@ class MongoDB(object):
     def do_status(self):
         con = MongoClient(host=self.mongo_host, port=self.mongo_port, read_preference=ReadPreference.SECONDARY)
 	try:
-            db = con[self.mongo_db[0]]
+            db = con['admin']
             if self.mongo_user and self.mongo_password:
                 db.authenticate(self.mongo_user, self.mongo_password)
 
