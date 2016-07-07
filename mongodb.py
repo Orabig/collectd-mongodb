@@ -36,11 +36,25 @@ class MongoDB(object):
         v.values = [value, ]
         v.dispatch()
 
-    def do_server_status(self):
+    def do_status(self):
         con = MongoClient(host=self.mongo_host, port=self.mongo_port, read_preference=ReadPreference.SECONDARY)
-        db = con[self.mongo_db[0]]
-        if self.mongo_user and self.mongo_password:
-            db.authenticate(self.mongo_user, self.mongo_password)
+	try:
+            db = con[self.mongo_db[0]]
+            if self.mongo_user and self.mongo_password:
+                db.authenticate(self.mongo_user, self.mongo_password)
+
+            self.do_server_status(db)
+
+            for mongo_db in self.mongo_db:
+                db = con[mongo_db]
+                if self.mongo_user and self.mongo_password:
+                    db.authenticate(self.mongo_user, self.mongo_password)
+
+	        self.do_db_status(db, mongo_db)
+        finally:
+            con.close()
+
+    def do_server_status(self, db):
         server_status = db.command('serverStatus')
 
         version = server_status['version']
@@ -98,24 +112,19 @@ class MongoDB(object):
             self.accesses = index_counters['accesses']
             self.misses = index_counters['misses']
 
-        for mongo_db in self.mongo_db:
-            db = con[mongo_db]
-            if self.mongo_user and self.mongo_password:
-                con[self.mongo_db[0]].authenticate(self.mongo_user, self.mongo_password)
-            db_stats = db.command('dbstats')
+    def do_db_status(self, db, mongo_db):
+        db_stats = db.command('dbstats')
 
-            # stats counts
-            self.submit('counter', 'object_count', db_stats['objects'], mongo_db)
-            self.submit('counter', 'collections', db_stats['collections'], mongo_db)
-            self.submit('counter', 'num_extents', db_stats['numExtents'], mongo_db)
-            self.submit('counter', 'indexes', db_stats['indexes'], mongo_db)
+        # stats counts
+        self.submit('counter', 'object_count', db_stats['objects'], mongo_db)
+        self.submit('counter', 'collections', db_stats['collections'], mongo_db)
+        self.submit('counter', 'num_extents', db_stats['numExtents'], mongo_db)
+        self.submit('counter', 'indexes', db_stats['indexes'], mongo_db)
 
-            # stats sizes
-            self.submit('file_size', 'storage', db_stats['storageSize'], mongo_db)
-            self.submit('file_size', 'index', db_stats['indexSize'], mongo_db)
-            self.submit('file_size', 'data', db_stats['dataSize'], mongo_db)
-
-        con.close()
+        # stats sizes
+        self.submit('file_size', 'storage', db_stats['storageSize'], mongo_db)
+        self.submit('file_size', 'index', db_stats['indexSize'], mongo_db)
+        self.submit('file_size', 'data', db_stats['dataSize'], mongo_db)
 
     def config(self, obj):
         for node in obj.children:
@@ -133,5 +142,5 @@ class MongoDB(object):
                 collectd.warning("mongodb plugin: Unkown configuration key %s" % node.key)
 
 mongodb = MongoDB()
-collectd.register_read(mongodb.do_server_status)
 collectd.register_config(mongodb.config)
+collectd.register_read(mongodb.do_status)
