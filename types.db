@@ -1,7 +1,2 @@
-cache_ratio                     value:GAUGE:0:100
 mongo_connections               value:COUNTER:0:U
-counter                         value:COUNTER:U:U
-file_size                       value:GAUGE:0:U
-memory                          value:GAUGE:0:281474976710656
-percent                         value:GAUGE:0:100.1
-total_operations                value:DERIVE:0:U
+
