@@ -55,11 +55,11 @@ class MongoDB(object):
             self.submit('memory', t, server_status['mem'][t])
 
         # connections
-        self.submit('connections', 'current', server_status['connections']['current'])
+        self.submit('mongo_connections', 'current', server_status['connections']['current'])
 	if 'available' in server_status['connections']:
-            self.submit('connections', 'available', server_status['connections']['available'])
+            self.submit('mongo_connections', 'available', server_status['connections']['available'])
 	if 'totalCreated' in server_status['connections']:
-            self.submit('connections', 'totalCreated', server_status['connections']['totalCreated'])
+            self.submit('mongo_connections', 'totalCreated', server_status['connections']['totalCreated'])
 
 	# network
 	if 'network' in server_status:
