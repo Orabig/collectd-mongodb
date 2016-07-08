@@ -51,8 +51,9 @@ class MongoDB(object):
             self.submit('total_operations', k, v)
 
         # memory
-        for t in ['resident', 'virtual', 'mapped']:
-            self.submit('memory', t, server_status['mem'][t])
+        for t in ['resident', 'virtual', 'mapped', 'bits']:
+            if t in server_status['mem']:
+                self.submit('memory', t, server_status['mem'][t])
 
         # connections
         self.submit('mongo_connections', 'current', server_status['connections']['current'])
@@ -67,7 +68,7 @@ class MongoDB(object):
                 self.submit('bytes', t, server_status['network'][t])
 
         # locks
-	if 'lockTime' in server_status['globalLock']:
+	if 'globalLock' in server_status and 'lockTime' in server_status['globalLock']:
             if self.lockTotalTime is not None and self.lockTime is not None:
                 if self.lockTime == server_status['globalLock']['lockTime']:
                     value = 0.0
@@ -76,7 +77,8 @@ class MongoDB(object):
                 self.submit('percent', 'lock_ratio', value)
 
             self.lockTime = server_status['globalLock']['lockTime']
-        self.lockTotalTime = server_status['globalLock']['totalTime']
+        if 'globalLock' in server_status and 'totalTime' in server_status['globalLock']:
+            self.lockTotalTime = server_status['globalLock']['totalTime']
 
         # indexes
 	if 'indexCounters' in server_status:
@@ -103,7 +105,9 @@ class MongoDB(object):
             if self.mongo_user and self.mongo_password:
                 con[self.mongo_db[0]].authenticate(self.mongo_user, self.mongo_password)
             db_stats = db.command('dbstats')
-
+            if "raw" in db_stats:
+                collectd.warning("This plugin is not compatible with mongos")
+                continue
             # stats counts
             self.submit('counter', 'object_count', db_stats['objects'], mongo_db)
             self.submit('counter', 'collections', db_stats['collections'], mongo_db)
