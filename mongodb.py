@@ -129,20 +129,6 @@ class MongoDB(object):
             self.submit('metrics-repl-buffer', "{}".format(k), v)
 
 
-        # command metrics
-        for k, v in metrics['commands'].items():
-	    if k == '<UNKNOWN>':
-                self.submit('metrics-commands', "unknown", v)
-                continue
-            elif k == 'mapreduce':
-                for l, w in metrics['commands']['mapreduce'].items():
-	            self.submit('metrics-commands', "mapreduce-{}-failed".format(l), w['failed'])
-	            self.submit('metrics-commands', "mapreduce-{}-total".format(l), w['total'])
-                continue
-
-	    self.submit('metrics-commands', "{}-failed".format(k), v['failed'])
-	    self.submit('metrics-commands', "{}-total".format(k), v['total'])
-
         # storage
         for k, v in metrics['storage'].items():
             for l, w in v.items():
