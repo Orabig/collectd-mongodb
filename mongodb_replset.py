@@ -18,7 +18,7 @@ def tstofloat(d):
 class MongoDBReplSet(object):
 
     def __init__(self):
-        self.plugin_name = "mongo-replset"
+        self.plugin_name = "mongodb_replset"
         self.mongo_host = "127.0.0.1"
         self.mongo_port = 27017
         self.mongo_user = None
@@ -62,8 +62,8 @@ class MongoDBReplSet(object):
         try:
             oplog_rs = db['oplog.rs']
 
-            oplog_head = oplog_rs.find().sort('ts', ASCENDING).limit(1)[0]['ts']
-            oplog_tail = oplog_rs.find().sort('ts', DESCENDING).limit(1)[0]['ts']
+            oplog_head = oplog_rs.find(sort=[('$natural',1)], limit=1)[0]['ts']
+            oplog_tail = oplog_rs.find(sort=[('$natural',-1)], limit=1)[0]['ts']
 
             self.submit('', 'oplog', 'head_timestamp', oplog_head.time)
             self.submit('', 'oplog', 'tail_timestamp', oplog_tail.time)
@@ -114,29 +114,30 @@ class MongoDBReplSet(object):
                 is_primary = m['stateStr'] == 'PRIMARY'
                 is_self = m.get('self', False)
 
-            host, port = m['name'].split(":")
-            short_host = host.split(".")[0]
-            if is_self:
-               short_host = 'self'
-               self_port = port
+                host, port = m['name'].split(":")
+                short_host = host.split(".")[0]
+                if is_self:
+                    short_host = 'self'
+                    self_port = port
 
-            n = "{}-{}".format(short_host, port)
-            if not is_self and re.match('\d+\.\d+\.\d+\.\d+', host):
-                n = "{}-{}".format(host,port)
+                    n = "{0}-{1}".format(short_host, port)
 
-            self.submit(rs_name, t, '{}.uptime'.format(n), m['uptime'])
-            self.submit(rs_name, t, '{}.state'.format(n), m['state'])
-            self.submit(rs_name, t, '{}.health'.format(n), m['health'])
+                if not is_self and re.match('\d+\.\d+\.\d+\.\d+', host):
+                    n = "{0}-{1}".format(host,port)
 
-            if m.has_key('electionTime'):
-                self.submit(rs_name, 'member','{}.election_time'.format(n), m['electionTime'].time)
+                self.submit(rs_name, t, '{0}-uptime'.format(n), m['uptime'])
+                self.submit(rs_name, t, '{0}-state'.format(n), m['state'])
+                self.submit(rs_name, t, '{0}-health'.format(n), m['health'])
+
+                if m.has_key('electionTime'):
+                    self.submit(rs_name, 'member','{0}.election_time'.format(n), m['electionTime'].time)
 
             if isinstance(m['optime'], dict):
                 optime = m['optime']['ts'].time
             else:
                 optime = m['optime'].time
 
-            self.submit(rs_name, t, '{}.optime_date'.format(n), optime)
+            self.submit(rs_name, t, '{0}-optime_date'.format(n), optime)
 
             if is_primary:
                 primary_optime = optime
@@ -144,16 +145,16 @@ class MongoDBReplSet(object):
                 self_optime = optime
 
             if m.has_key('lastHeartbeat'):
-                self.submit(rs_name, t, '{}.last_heartbeat'.format(n), tstofloat(m['lastHeartbeat']))
+                self.submit(rs_name, t, '{0}-last_heartbeat'.format(n), tstofloat(m['lastHeartbeat']))
 
             if m.has_key('lastHeartbeatRecv'):
-                self.submit(rs_name, t, '{}.last_heartbeat_recv'.format(n), tstofloat(m['lastHeartbeatRecv']))
+                self.submit(rs_name, t, '{0}-last_heartbeat_recv'.format(n), tstofloat(m['lastHeartbeatRecv']))
             if m.has_key('pingMs'):
-                self.submit(rs_name, t, '{}.ping_ms'.format(n), m['pingMs'])
+                self.submit(rs_name, t, '{0}-ping_ms'.format(n), m['pingMs'])
 
             if self_optime != None and primary_optime != None:
-                n = "self-{}".format(self_port)
-                self.submit(rs_name, t, '{}.primary_lag'.format(n), primary_optime - self_optime)
+                n = "self-{0}".format(self_port)
+                self.submit(rs_name, t, '{0}-primary_lag'.format(n), primary_optime - self_optime)
  
         except Exception, inst:
             print inst
@@ -169,7 +170,7 @@ class MongoDBReplSet(object):
             elif node.key == 'Password':
                 self.mongo_password = node.values[0]
             else:
-                collectd.warning("mongodb-replset plugin: Unkown configuration key %s" % node.key)
+                collectd.warning("mongodb_replset plugin: Unkown configuration key %s" % node.key)
 
 
 mongodb_replset = MongoDBReplSet()

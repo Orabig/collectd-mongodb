@@ -11,7 +11,7 @@ from distutils.version import StrictVersion as V
 class MongoDB(object):
 
     def __init__(self):
-        self.plugin_name = "mongo"
+        self.plugin_name = "mongodb"
         self.mongo_host = "127.0.0.1"
         self.mongo_port = 27017
         self.mongo_db = ["admin", ]
@@ -81,17 +81,17 @@ class MongoDB(object):
 	metrics = server_status['metrics']
 	for k in ['document', 'operation', 'queryExecutor', 'record']:
             for i, val in metrics[k].items():
-	        self.submit('metrics-{}'.format(k), "{}".format(i), val)
+	        self.submit('metrics_{0}'.format(k.lower()), "{0}".format(i.lower()), val)
 
         # metrics/getlasterror
-	self.submit('metrics-get_last_error','wtimeouts', server_status['metrics']['getLastError']['wtimeouts'])
+	self.submit('metrics_get_last_error','wtimeouts', server_status['metrics']['getLastError']['wtimeouts'])
 	for k,v in server_status['metrics']['getLastError']['wtime'].items():
-	    self.submit('metrics-get_last_error', "wtime-{}".format(k), v)
+	    self.submit('metrics_get_last_error', "wtime-{0}".format(k), v)
 
         # metrics/cursor
-	self.submit('metrics-cursor','timed_out', server_status['metrics']['cursor']['timedOut'])
+	self.submit('metrics_cursor','timed_out', server_status['metrics']['cursor']['timedOut'])
 	for k,v in server_status['metrics']['cursor']['open'].items():
-	    self.submit('metrics-cursor', "open-{}".format(k), v)
+	    self.submit('metrics_cursor', "open-{0}".format(k), v)
 
         # metrics/repl/executor metrics
 	if 'executor' in metrics['repl']:
@@ -100,45 +100,45 @@ class MongoDB(object):
                     continue
                 elif k in ['counters', 'queues']:
                     for a, b in v.items():
-                        self.submit('metrics-repl-executor', "{}-{}".format(k, a), b)
+                        self.submit('metrics_repl_executor', "{0}-{1}".format(k, a), b)
                 else:
-                    self.submit('metrics-repl-executor', "{}".format(k), v)
+                    self.submit('metrics_repl_executor', "{0}".format(k), v)
 
         # metrics/repl/apply metrics
         for k, v in metrics['repl']['apply'].items():
             if k in ['batches']:
                 for a, b in v.items():
-                    self.submit('metrics-repl-apply', "{}-{}".format(k, a), b)
+                    self.submit('metrics_repl_apply', "{0}-{1}".format(k, a), b)
             else:
-                self.submit('metrics-repl-apply', "{}".format(k), v)
+                self.submit('metrics_repl_apply', "{0}".format(k), v)
 
         # metrics/repl/network metrics
         for k, v in metrics['repl']['network'].items():
             if k in ['getmores']:
                 for a, b in v.items():
-                    self.submit('metrics-repl-network', "{}-{}".format(k, a), b)
+                    self.submit('metrics_repl_network', "{0}-{1}".format(k, a), b)
             else:
-                self.submit('metrics-repl-network', "{}".format(k), v)
+                self.submit('metrics_repl_network', "{0}".format(k), v)
 
         # metrics/repl/preload
         for k, v in metrics['repl']['preload'].items():
             if k in ['docs', 'indexes']:
                 for a, b in v.items():
-                    self.submit('metrics-repl-preload', "{}-{}".format(k, a), b)
+                    self.submit('metrics_repl_preload', "{0}-{1}".format(k, a), b)
 
         for k, v in metrics['repl']['buffer'].items():
-            self.submit('metrics-repl-buffer', "{}".format(k), v)
+            self.submit('metrics_repl_buffer', "{0}".format(k), v)
 
 
         # metrics/storage
         for k, v in metrics['storage'].items():
             for l, w in v.items():
                 for m, x in w.items():
-                    self.submit('metrics-storage-{}'.format(k), "{}-{}".format(l,m), x)
+                    self.submit('metrics_storage_{0}'.format(k), "{0}-{1}".format(l,m), x)
 
         # metrics/ttl
         for k, v in metrics['ttl'].items():
-            self.submit('metrics-ttl', "{}".format(k), v)
+            self.submit('metrics_ttl', "{0}".format(k), v)
 
 	# network
 	if 'network' in server_status:
@@ -160,11 +160,11 @@ class MongoDB(object):
             self.submit('global_lock', 'total_time', server_status['globalLock']['totalTime'])
 	    for k in ['currentQueue','activeClients']:
                 for m, v in server_status['globalLock'][k].items():
-                    self.submit('global_lock', '{}-{}'.format(k.lower(), m), v)
+                    self.submit('global_lock', '{0}-{1}'.format(k.lower(), m), v)
 
         if 'locks' in server_status:
             for t, stats in server_status['locks'].items():
-		typ = 'locks-{}'.format(t.lower())
+		typ = 'locks_{0}'.format(t.lower())
 		if t == '.':
 		  typ  = 'locks'
                 for k, grouping in stats.items():
@@ -178,7 +178,7 @@ class MongoDB(object):
                         elif s == 'W':
 			    slabel = 'excl-write'
 
-		        self.submit(typ, '{}-{}'.format(k.lower(), slabel), v)
+		        self.submit(typ, '{0}-{1}'.format(k.lower(), slabel), v)
 
 
         # indexes
