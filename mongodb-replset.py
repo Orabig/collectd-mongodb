@@ -65,8 +65,8 @@ class MongoDBReplSet(object):
             oplog_head = oplog_rs.find().sort('ts', ASCENDING).limit(1)[0]['ts']
             oplog_tail = oplog_rs.find().sort('ts', DESCENDING).limit(1)[0]['ts']
 
-            self.submit(None, 'oplog', 'head_timestamp', oplog_head.time)
-            self.submit(None, 'oplog', 'tail_timestamp', oplog_tail.time)
+            self.submit('', 'oplog', 'head_timestamp', oplog_head.time)
+            self.submit('', 'oplog', 'tail_timestamp', oplog_tail.time)
 
         except Exception, inst:
             print inst
@@ -80,9 +80,9 @@ class MongoDBReplSet(object):
             size =  oplog_info['size']
             storageSize = oplog_info['storageSize']
 
-            self.submit(None, 'oplog', 'items_total', count)
-            self.submit(None, 'oplog', 'current_size_bytes', size)
-            self.submit(None, 'oplog', 'storage_size_bytes', storageSize)
+            self.submit('', 'oplog', 'items_total', count)
+            self.submit('', 'oplog', 'current_size_bytes', size)
+            self.submit('', 'oplog', 'storage_size_bytes', storageSize)
 
         except Exception, inst:
             print inst
@@ -154,7 +154,7 @@ class MongoDBReplSet(object):
             if self_optime != None and primary_optime != None:
                 n = "self-{}".format(self_port)
                 self.submit(rs_name, t, '{}.primary_lag'.format(n), primary_optime - self_optime)
-          
+ 
         except Exception, inst:
             print inst
 

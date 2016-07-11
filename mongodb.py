@@ -83,27 +83,28 @@ class MongoDB(object):
             for i, val in metrics[k].items():
 	        self.submit('metrics-{}'.format(k), "{}".format(i), val)
 
-        # getlasterror
+        # metrics/getlasterror
 	self.submit('metrics-get_last_error','wtimeouts', server_status['metrics']['getLastError']['wtimeouts'])
 	for k,v in server_status['metrics']['getLastError']['wtime'].items():
 	    self.submit('metrics-get_last_error', "wtime-{}".format(k), v)
 
-        # cursor metrics
+        # metrics/cursor
 	self.submit('metrics-cursor','timed_out', server_status['metrics']['cursor']['timedOut'])
 	for k,v in server_status['metrics']['cursor']['open'].items():
 	    self.submit('metrics-cursor', "open-{}".format(k), v)
 
-        # repl executor metrics
-        for k, v in metrics['repl']['executor'].items():
-            if k in ['networkInterface', 'shuttingDown']:
-                continue
-            elif k in ['counters', 'queues']:
-                for a, b in v.items():
-                    self.submit('metrics-repl-executor', "{}-{}".format(k, a), b)
-            else:
-                self.submit('metrics-repl-executor', "{}".format(k), v)
+        # metrics/repl/executor metrics
+	if 'executor' in metrics['repl']:
+            for k, v in metrics['repl']['executor'].items():
+                if k in ['networkInterface', 'shuttingDown']:
+                    continue
+                elif k in ['counters', 'queues']:
+                    for a, b in v.items():
+                        self.submit('metrics-repl-executor', "{}-{}".format(k, a), b)
+                else:
+                    self.submit('metrics-repl-executor', "{}".format(k), v)
 
-        # repl apply metrics
+        # metrics/repl/apply metrics
         for k, v in metrics['repl']['apply'].items():
             if k in ['batches']:
                 for a, b in v.items():
@@ -111,7 +112,7 @@ class MongoDB(object):
             else:
                 self.submit('metrics-repl-apply', "{}".format(k), v)
 
-        # repl network metrics
+        # metrics/repl/network metrics
         for k, v in metrics['repl']['network'].items():
             if k in ['getmores']:
                 for a, b in v.items():
@@ -119,7 +120,7 @@ class MongoDB(object):
             else:
                 self.submit('metrics-repl-network', "{}".format(k), v)
 
-        # repl preload
+        # metrics/repl/preload
         for k, v in metrics['repl']['preload'].items():
             if k in ['docs', 'indexes']:
                 for a, b in v.items():
@@ -129,13 +130,13 @@ class MongoDB(object):
             self.submit('metrics-repl-buffer', "{}".format(k), v)
 
 
-        # storage
+        # metrics/storage
         for k, v in metrics['storage'].items():
             for l, w in v.items():
                 for m, x in w.items():
                     self.submit('metrics-storage-{}'.format(k), "{}-{}".format(l,m), x)
 
-        # ttl
+        # metrics/ttl
         for k, v in metrics['ttl'].items():
             self.submit('metrics-ttl', "{}".format(k), v)
 
@@ -144,7 +145,7 @@ class MongoDB(object):
 	    for t in ['bytesIn', 'bytesOut', 'numRequests']:
                 self.submit('bytes', t, server_status['network'][t])
 
-        # locks
+        # locks (pre 3.2)
 	if 'lockTime' in server_status['globalLock']:
             if self.lockTotalTime is not None and self.lockTime is not None:
                 if self.lockTime == server_status['globalLock']['lockTime']:
@@ -154,7 +155,31 @@ class MongoDB(object):
                 self.submit('percent', 'lock_ratio', value)
 
             self.lockTime = server_status['globalLock']['lockTime']
-        self.lockTotalTime = server_status['globalLock']['totalTime']
+            self.lockTotalTime = server_status['globalLock']['totalTime']
+        else:
+            self.submit('global_lock', 'total_time', server_status['globalLock']['totalTime'])
+	    for k in ['currentQueue','activeClients']:
+                for m, v in server_status['globalLock'][k].items():
+                    self.submit('global_lock', '{}-{}'.format(k.lower(), m), v)
+
+        if 'locks' in server_status:
+            for t, stats in server_status['locks'].items():
+		typ = 'locks-{}'.format(t.lower())
+		if t == '.':
+		  typ  = 'locks'
+                for k, grouping in stats.items():
+                    for s, v in grouping.items():
+                        if s == 'r':
+			    slabel = 'intent-shared-read'
+                        elif s == 'w':
+			    slabel = 'intent-excl-write'
+                        elif s == 'R':
+			    slabel = 'shared-read'
+                        elif s == 'W':
+			    slabel = 'excl-write'
+
+		        self.submit(typ, '{}-{}'.format(k.lower(), slabel), v)
+
 
         # indexes
 	if 'indexCounters' in server_status:
