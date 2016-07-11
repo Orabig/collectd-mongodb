@@ -9,3 +9,4 @@ my_state                        value:GAUGE:0:20
 term                            value:GAUGE:0:U
 hearbeat_interval_ms            value:GAUGE:0:U
 member                          value:GAUGE:0:U
+oplog                           value:GAUGE:0:U
