@@ -77,6 +77,82 @@ class MongoDB(object):
 	if 'totalCreated' in server_status['connections']:
             self.submit('connections', 'totalCreated', server_status['connections']['totalCreated'])
 
+        # metrics
+	metrics = server_status['metrics']
+	for k in ['document', 'operation', 'queryExecutor', 'record']:
+            for i, val in metrics[k].items():
+	        self.submit('metrics-{}'.format(k), "{}".format(i), val)
+
+        # getlasterror
+	self.submit('metrics-get_last_error','wtimeouts', server_status['metrics']['getLastError']['wtimeouts'])
+	for k,v in server_status['metrics']['getLastError']['wtime'].items():
+	    self.submit('metrics-get_last_error', "wtime-{}".format(k), v)
+
+        # cursor metrics
+	self.submit('metrics-cursor','timed_out', server_status['metrics']['cursor']['timedOut'])
+	for k,v in server_status['metrics']['cursor']['open'].items():
+	    self.submit('metrics-cursor', "open-{}".format(k), v)
+
+        # repl executor metrics
+        for k, v in metrics['repl']['executor'].items():
+            if k in ['networkInterface', 'shuttingDown']:
+                continue
+            elif k in ['counters', 'queues']:
+                for a, b in v.items():
+                    self.submit('metrics-repl-executor', "{}-{}".format(k, a), b)
+            else:
+                self.submit('metrics-repl-executor', "{}".format(k), v)
+
+        # repl apply metrics
+        for k, v in metrics['repl']['apply'].items():
+            if k in ['batches']:
+                for a, b in v.items():
+                    self.submit('metrics-repl-apply', "{}-{}".format(k, a), b)
+            else:
+                self.submit('metrics-repl-apply', "{}".format(k), v)
+
+        # repl network metrics
+        for k, v in metrics['repl']['network'].items():
+            if k in ['getmores']:
+                for a, b in v.items():
+                    self.submit('metrics-repl-network', "{}-{}".format(k, a), b)
+            else:
+                self.submit('metrics-repl-network', "{}".format(k), v)
+
+        # repl preload
+        for k, v in metrics['repl']['preload'].items():
+            if k in ['docs', 'indexes']:
+                for a, b in v.items():
+                    self.submit('metrics-repl-preload', "{}-{}".format(k, a), b)
+
+        for k, v in metrics['repl']['buffer'].items():
+            self.submit('metrics-repl-buffer', "{}".format(k), v)
+
+
+        # command metrics
+        for k, v in metrics['commands'].items():
+	    if k == '<UNKNOWN>':
+                self.submit('metrics-commands', "unknown", v)
+                continue
+            elif k == 'mapreduce':
+                for l, w in metrics['commands']['mapreduce'].items():
+	            self.submit('metrics-commands', "mapreduce-{}-failed".format(l), w['failed'])
+	            self.submit('metrics-commands', "mapreduce-{}-total".format(l), w['total'])
+                continue
+
+	    self.submit('metrics-commands', "{}-failed".format(k), v['failed'])
+	    self.submit('metrics-commands', "{}-total".format(k), v['total'])
+
+        # storage
+        for k, v in metrics['storage'].items():
+            for l, w in v.items():
+                for m, x in w.items():
+                    self.submit('metrics-storage-{}'.format(k), "{}-{}".format(l,m), x)
+
+        # ttl
+        for k, v in metrics['ttl'].items():
+            self.submit('metrics-ttl', "{}".format(k), v)
+
 	# network
 	if 'network' in server_status:
 	    for t in ['bytesIn', 'bytesOut', 'numRequests']:
