@@ -4,6 +4,7 @@
 
 import collectd
 from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
 from pymongo.read_preferences import ReadPreference
 from distutils.version import StrictVersion as V
 
@@ -43,10 +44,18 @@ class MongoDB(object):
             collectd.error("%s: Unexpected error in submit()" % self.plugin_name)
 
     def do_server_status(self):
-        con = MongoClient(host=self.mongo_host, port=self.mongo_port, read_preference=ReadPreference.SECONDARY)
-        db = con[self.mongo_db[0]]
-        if self.mongo_user and self.mongo_password:
-            db.authenticate(self.mongo_user, self.mongo_password)
+        try:
+            con = MongoClient(host=self.mongo_host, port=self.mongo_port, read_preference=ReadPreference.SECONDARY)
+            db = con[self.mongo_db[0]]
+            if self.mongo_user and self.mongo_password:
+                db.authenticate(self.mongo_user, self.mongo_password)
+        except ConnectionFailure as e:
+            collectd.error("%s: %s" % (self.plugin_name, e))
+            return
+        except:
+            collectd.error("%s: Unexpected error in do_server_status() while connecting to server" % self.plugin_name)
+            return
+
         server_status = db.command('serverStatus')
 
         version = server_status['version']
@@ -63,18 +72,18 @@ class MongoDB(object):
 
         # connections
         self.submit('mongo_connections', 'current', server_status['connections']['current'])
-	if 'available' in server_status['connections']:
+        if 'available' in server_status['connections']:
             self.submit('mongo_connections', 'available', server_status['connections']['available'])
-	if 'totalCreated' in server_status['connections']:
+        if 'totalCreated' in server_status['connections']:
             self.submit('mongo_connections', 'totalCreated', server_status['connections']['totalCreated'])
 
-	# network
-	if 'network' in server_status:
-	    for t in ['bytesIn', 'bytesOut', 'numRequests']:
+        # network
+        if 'network' in server_status:
+            for t in ['bytesIn', 'bytesOut', 'numRequests']:
                 self.submit('bytes', t, server_status['network'][t])
 
         # locks
-	if 'globalLock' in server_status and 'lockTime' in server_status['globalLock']:
+        if 'globalLock' in server_status and 'lockTime' in server_status['globalLock']:
             if self.lockTotalTime is not None and self.lockTime is not None:
                 if self.lockTime == server_status['globalLock']['lockTime']:
                     value = 0.0
