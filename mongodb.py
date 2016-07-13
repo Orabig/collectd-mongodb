@@ -7,7 +7,6 @@ from pymongo import MongoClient
 from pymongo.read_preferences import ReadPreference
 from distutils.version import StrictVersion as V
 
-
 class MongoDB(object):
 
     def __init__(self):
@@ -23,18 +22,25 @@ class MongoDB(object):
         self.accesses = None
         self.misses = None
 
+        collectd.info("%s: plugin started" % self.plugin_name)
+
     def submit(self, type, instance, value, db=None):
-        if db:
-            plugin_instance = '%s-%s' % (self.mongo_port, db)
-        else:
-            plugin_instance = str(self.mongo_port)
-        v = collectd.Values()
-        v.plugin = self.plugin_name
-        v.plugin_instance = plugin_instance
-        v.type = type
-        v.type_instance = instance
-        v.values = [value, ]
-        v.dispatch()
+        try:
+            if db:
+                plugin_instance = '%s-%s' % (self.mongo_port, db)
+            else:
+                plugin_instance = str(self.mongo_port)
+            v = collectd.Values()
+            v.plugin = self.plugin_name
+            v.plugin_instance = plugin_instance
+            v.type = type
+            v.type_instance = instance
+            v.values = [value, ]
+            v.dispatch()
+        except TypeError as e:
+            collectd.error("%s: %s" % (self.plugin_name, e))
+        except:
+            collectd.error("%s: Unexpected error in submit()" % self.plugin_name)
 
     def do_server_status(self):
         con = MongoClient(host=self.mongo_host, port=self.mongo_port, read_preference=ReadPreference.SECONDARY)
@@ -106,7 +112,7 @@ class MongoDB(object):
                 con[self.mongo_db[0]].authenticate(self.mongo_user, self.mongo_password)
             db_stats = db.command('dbstats')
             if "raw" in db_stats:
-                collectd.warning("This plugin is not compatible with mongos")
+                collectd.warning("%s: This plugin is not compatible with mongos" % self.plugin_name)
                 continue
             # stats counts
             self.submit('counter', 'object_count', db_stats['objects'], mongo_db)
@@ -134,7 +140,7 @@ class MongoDB(object):
             elif node.key == 'Database':
                 self.mongo_db = node.values
             else:
-                collectd.warning("mongodb plugin: Unkown configuration key %s" % node.key)
+                collectd.warning("%s: Unkown configuration key %s" % (self.plugin_name, node.key))
 
 mongodb = MongoDB()
 collectd.register_read(mongodb.do_server_status)
