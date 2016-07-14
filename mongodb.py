@@ -7,6 +7,7 @@ from pymongo import MongoClient
 from pymongo.read_preferences import ReadPreference
 from distutils.version import StrictVersion as V
 
+import traceback
 
 class MongoDB(object):
 
@@ -51,6 +52,8 @@ class MongoDB(object):
                     db.authenticate(self.mongo_user, self.mongo_password)
 
 	        self.do_db_status(db, mongo_db)
+        except:
+            traceback.print_exc()
         finally:
             con.close()
 

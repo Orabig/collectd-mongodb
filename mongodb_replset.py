@@ -12,6 +12,7 @@ from distutils.version import StrictVersion as V
 import math
 import time
 import re
+import traceback
 
 def tstofloat(d):
     return time.mktime(d.timetuple())
@@ -51,6 +52,8 @@ class MongoDBReplSet(object):
                 db.authenticate(self.mongo_user, self.mongo_password)
 
             self.do_oplog_get_metrics(db)
+        except:
+            traceback.print_exc()
         finally:
             con.close()
 
@@ -59,120 +62,104 @@ class MongoDBReplSet(object):
         self.do_get_replication_info_stats(db)
 
     def do_get_replication_info_timestamps(self, db):
+        oplog_rs = db['oplog.rs']
 
-        try:
-            oplog_rs = db['oplog.rs']
+        oplog_head = oplog_rs.find(sort=[('$natural',1)], limit=1)[0]['ts']
+        oplog_tail = oplog_rs.find(sort=[('$natural',-1)], limit=1)[0]['ts']
 
-            oplog_head = oplog_rs.find(sort=[('$natural',1)], limit=1)[0]['ts']
-            oplog_tail = oplog_rs.find(sort=[('$natural',-1)], limit=1)[0]['ts']
+        self.submit('', 'oplog', 'head_timestamp', oplog_head.time)
+        self.submit('', 'oplog', 'tail_timestamp', oplog_tail.time)
 
-            self.submit('', 'oplog', 'head_timestamp', oplog_head.time)
-            self.submit('', 'oplog', 'tail_timestamp', oplog_tail.time)
-
-            self.submit('', 'oplog', 'time_diff', oplog_tail.time - oplog_head.time)
-
-        except Exception, inst:
-            print inst
-	    raise
+        self.submit('', 'oplog', 'time_diff', oplog_tail.time - oplog_head.time)
 
     def do_get_replication_info_stats(self, db):
 
-        try:
-            oplog_info = db.command({ "collStats" : "oplog.rs" })
+        oplog_info = db.command({ "collStats" : "oplog.rs" })
 
-            count = oplog_info['count']
-            self.submit('', 'oplog', 'items_total', count)
+        count = oplog_info['count']
+        self.submit('', 'oplog', 'items_total', count)
 
-            size =  oplog_info['size']
-            self.submit('', 'oplog', 'current_size_bytes', size)
+        size =  oplog_info['size']
+        self.submit('', 'oplog', 'current_size_bytes', size)
 
-            storageSize = oplog_info['storageSize']
-            self.submit('', 'oplog', 'storage_size_bytes', storageSize)
+        storageSize = oplog_info['storageSize']
+        self.submit('', 'oplog', 'storage_size_bytes', storageSize)
 
-            if 'maxSize' in oplog_info:
-	      maxSize = oplog_info['maxSize']
-	      logSizeMB = maxSize / (1024*1024)
-              self.submit('', 'oplog', 'log_size_mb', logSizeMB)
+        if 'maxSize' in oplog_info:
+	    maxSize = oplog_info['maxSize']
+	    logSizeMB = maxSize / (1024*1024)
+            self.submit('', 'oplog', 'log_size_mb', logSizeMB)
 
-	    usedMB = size / (1024 * 1024)
-            usedMB = math.ceil(usedMB * 100) / 100
-            self.submit('', 'oplog', 'used_mb', usedMB)
-
-        except Exception, inst:
-            print inst
-	    raise
-
+	usedMB = size / (1024 * 1024)
+        usedMB = math.ceil(usedMB * 100) / 100
+        self.submit('', 'oplog', 'used_mb', usedMB)
 
     def do_replset_get_status(self, db):
 
-        try:
-            rs_status = db.command({"replSetGetStatus": 1})
+        rs_status = db.command({"replSetGetStatus": 1})
 
-            rs_name = rs_status['set']
+        rs_name = rs_status['set']
 
-            self.submit(rs_name, 'my_state', 'value', rs_status['myState'])
+        self.submit(rs_name, 'my_state', 'value', rs_status['myState'])
 
-            if rs_status.has_key('term'):
-                self.submit(rs_name, 'term', 'value', rs_status['term'])
+        if rs_status.has_key('term'):
+            self.submit(rs_name, 'term', 'value', rs_status['term'])
 
-            if rs_status.has_key('heartbeatIntervalMillis'):
-                self.submit(rs_name, 'hearbeat_interval_ms', 'value', rs_status['heartbeatIntervalMillis'])
+        if rs_status.has_key('heartbeatIntervalMillis'):
+            self.submit(rs_name, 'hearbeat_interval_ms', 'value', rs_status['heartbeatIntervalMillis'])
 
-            primary_optime = None
-            self_optime = None
-            self_port = None
+        primary_optime = None
+        self_optime = None
+        self_port = None
 
-            self.submit(rs_name, 'member', 'count', len(rs_status['members']))
+        self.submit(rs_name, 'member', 'count', len(rs_status['members']))
 
-            t = 'member'
-            for m in rs_status['members']:
-                is_primary = m['stateStr'] == 'PRIMARY'
-                is_self = m.get('self', False)
+        t = 'member'
+        for m in rs_status['members']:
+            is_primary = m['stateStr'] == 'PRIMARY'
+            is_self = m.get('self', False)
 
-                host, port = m['name'].split(":")
-                short_host = host.split(".")[0]
-                if is_self:
-                    short_host = 'self'
-                    self_port = port
-
-                    n = "{0}-{1}".format(short_host, port)
-
-                if not is_self and re.match('\d+\.\d+\.\d+\.\d+', host):
-                    n = "{0}-{1}".format(host,port)
-
-                self.submit(rs_name, t, '{0}-uptime'.format(n), m['uptime'])
-                self.submit(rs_name, t, '{0}-state'.format(n), m['state'])
-                self.submit(rs_name, t, '{0}-health'.format(n), m['health'])
-
-                if m.has_key('electionTime'):
-                    self.submit(rs_name, 'member','{0}.election_time'.format(n), m['electionTime'].time)
-
-            if isinstance(m['optime'], dict):
-                optime = m['optime']['ts'].time
-            else:
-                optime = m['optime'].time
-
-            self.submit(rs_name, t, '{0}-optime_date'.format(n), optime)
-
-            if is_primary:
-                primary_optime = optime
+            host, port = m['name'].split(":")
+            short_host = host.split(".")[0]
             if is_self:
-                self_optime = optime
+                short_host = 'self'
+                self_port = port
 
-            if m.has_key('lastHeartbeat'):
-                self.submit(rs_name, t, '{0}-last_heartbeat'.format(n), tstofloat(m['lastHeartbeat']))
+                n = "{0}-{1}".format(short_host, port)
 
-            if m.has_key('lastHeartbeatRecv'):
-                self.submit(rs_name, t, '{0}-last_heartbeat_recv'.format(n), tstofloat(m['lastHeartbeatRecv']))
-            if m.has_key('pingMs'):
-                self.submit(rs_name, t, '{0}-ping_ms'.format(n), m['pingMs'])
+            if not is_self and re.match('\d+\.\d+\.\d+\.\d+', host):
+                n = "{0}-{1}".format(host,port)
 
-            if self_optime != None and primary_optime != None:
-                n = "self-{0}".format(self_port)
-                self.submit(rs_name, t, '{0}-replication_lag'.format(n), primary_optime - self_optime)
- 
-        except Exception, inst:
-            print inst
+            self.submit(rs_name, t, '{0}-uptime'.format(n), m['uptime'])
+            self.submit(rs_name, t, '{0}-state'.format(n), m['state'])
+            self.submit(rs_name, t, '{0}-health'.format(n), m['health'])
+
+            if m.has_key('electionTime'):
+                self.submit(rs_name, 'member','{0}.election_time'.format(n), m['electionTime'].time)
+
+        if isinstance(m['optime'], dict):
+            optime = m['optime']['ts'].time
+        else:
+            optime = m['optime'].time
+
+        self.submit(rs_name, t, '{0}-optime_date'.format(n), optime)
+
+        if is_primary:
+            primary_optime = optime
+        if is_self:
+            self_optime = optime
+
+        if m.has_key('lastHeartbeat'):
+            self.submit(rs_name, t, '{0}-last_heartbeat'.format(n), tstofloat(m['lastHeartbeat']))
+
+        if m.has_key('lastHeartbeatRecv'):
+            self.submit(rs_name, t, '{0}-last_heartbeat_recv'.format(n), tstofloat(m['lastHeartbeatRecv']))
+        if m.has_key('pingMs'):
+            self.submit(rs_name, t, '{0}-ping_ms'.format(n), m['pingMs'])
+
+        if self_optime != None and primary_optime != None:
+            n = "self-{0}".format(self_port)
+            self.submit(rs_name, t, '{0}-replication_lag'.format(n), primary_optime - self_optime)
 
     def config(self, obj):
         for node in obj.children:
