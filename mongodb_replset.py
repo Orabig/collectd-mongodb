@@ -9,6 +9,7 @@ from pymongo import MongoClient
 from pymongo.read_preferences import ReadPreference
 from distutils.version import StrictVersion as V
 
+import math
 import time
 import re
 
@@ -68,8 +69,11 @@ class MongoDBReplSet(object):
             self.submit('', 'oplog', 'head_timestamp', oplog_head.time)
             self.submit('', 'oplog', 'tail_timestamp', oplog_tail.time)
 
+            self.submit('', 'oplog', 'time_diff', oplog_tail.time - oplog_head.time)
+
         except Exception, inst:
             print inst
+	    raise
 
     def do_get_replication_info_stats(self, db):
 
@@ -77,15 +81,26 @@ class MongoDBReplSet(object):
             oplog_info = db.command({ "collStats" : "oplog.rs" })
 
             count = oplog_info['count']
-            size =  oplog_info['size']
-            storageSize = oplog_info['storageSize']
-
             self.submit('', 'oplog', 'items_total', count)
+
+            size =  oplog_info['size']
             self.submit('', 'oplog', 'current_size_bytes', size)
+
+            storageSize = oplog_info['storageSize']
             self.submit('', 'oplog', 'storage_size_bytes', storageSize)
+
+            if 'maxSize' in oplog_info:
+	      maxSize = oplog_info['maxSize']
+	      logSizeMB = maxSize / (1024*1024)
+              self.submit('', 'oplog', 'log_size_mb', logSizeMB)
+
+	    usedMB = size / (1024 * 1024)
+            usedMB = int(math.ceil(usedMB * 100) / 100)
+            self.submit('', 'oplog', 'used_mb', logSizeMB)
 
         except Exception, inst:
             print inst
+	    raise
 
 
     def do_replset_get_status(self, db):
@@ -154,7 +169,7 @@ class MongoDBReplSet(object):
 
             if self_optime != None and primary_optime != None:
                 n = "self-{0}".format(self_port)
-                self.submit(rs_name, t, '{0}-primary_lag'.format(n), primary_optime - self_optime)
+                self.submit(rs_name, t, '{0}-replication_lag'.format(n), primary_optime - self_optime)
  
         except Exception, inst:
             print inst
