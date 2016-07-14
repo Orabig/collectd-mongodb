@@ -29,3 +29,7 @@ locks_oplog                     value:COUNTER:0:U
 locks_global                    value:COUNTER:0:U
 locks_collection                value:COUNTER:0:U
 locks_database                  value:COUNTER:0:U
+opcounters                      value:DERIVE:0:U
+opcounters_repl                 value:DERIVE:0:U
+asserts                         value:COUNTER:0:U
+extra_info                      value:COUNTER:0:U

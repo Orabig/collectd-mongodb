@@ -65,10 +65,18 @@ class MongoDB(object):
         # operations
         for k, v in server_status['opcounters'].items():
             self.submit('total_operations', k, v)
+            self.submit('opcounters', k, v)
+	# repl operations
+        for k, v in server_status['opcountersRepl'].items():
+            self.submit('opcounters_repl', k, v)
 
         # memory
         for t in ['resident', 'virtual', 'mapped']:
             self.submit('memory', t, server_status['mem'][t])
+
+       # asserts
+        for k, v in server_status['asserts'].items():
+            self.submit('asserts', k, v)
 
         # connections
         self.submit('connections', 'current', server_status['connections']['current'])

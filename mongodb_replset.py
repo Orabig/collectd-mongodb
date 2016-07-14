@@ -95,8 +95,8 @@ class MongoDBReplSet(object):
               self.submit('', 'oplog', 'log_size_mb', logSizeMB)
 
 	    usedMB = size / (1024 * 1024)
-            usedMB = int(math.ceil(usedMB * 100) / 100)
-            self.submit('', 'oplog', 'used_mb', logSizeMB)
+            usedMB = math.ceil(usedMB * 100) / 100
+            self.submit('', 'oplog', 'used_mb', usedMB)
 
         except Exception, inst:
             print inst
