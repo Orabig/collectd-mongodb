@@ -74,9 +74,12 @@ class MongoDB(object):
         for t in ['resident', 'virtual', 'mapped']:
             self.submit('memory', t, server_status['mem'][t])
 
-       # asserts
+        # asserts
         for k, v in server_status['asserts'].items():
             self.submit('asserts', k, v)
+
+        # page faults
+        self.submit('extra_info', 'page_faults', server_status['extra_info']['page_faults'])
 
         # connections
         self.submit('connections', 'current', server_status['connections']['current'])
