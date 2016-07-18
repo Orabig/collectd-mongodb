@@ -70,7 +70,7 @@ class MongoDBReplSet(object):
         self.submit('', 'oplog', 'head_timestamp', oplog_head.time)
         self.submit('', 'oplog', 'tail_timestamp', oplog_tail.time)
 
-        self.submit('', 'oplog', 'time_diff', oplog_tail.time - oplog_head.time)
+        self.submit('', 'oplog', 'time_diff', int(oplog_tail.time - oplog_head.time))
 
     def do_get_replication_info_stats(self, db):
 
@@ -86,11 +86,11 @@ class MongoDBReplSet(object):
         self.submit('', 'oplog', 'storage_size_bytes', storageSize)
 
         if 'maxSize' in oplog_info:
-	    maxSize = oplog_info['maxSize']
-	    logSizeMB = maxSize / (1024*1024)
+            maxSize = oplog_info['maxSize']
+            logSizeMB = maxSize / (1024*1024)
             self.submit('', 'oplog', 'log_size_mb', logSizeMB)
 
-	usedMB = size / (1024 * 1024)
+        usedMB = size / (1024 * 1024)
         usedMB = math.ceil(usedMB * 100) / 100
         self.submit('', 'oplog', 'used_mb', usedMB)
 
@@ -117,7 +117,7 @@ class MongoDBReplSet(object):
         t = 'member'
         for m in rs_status['members']:
             is_primary = m['stateStr'] == 'PRIMARY'
-            is_self = m.get('self', False)
+            is_self = m.has_key('self')
 
             host, port = m['name'].split(":")
             short_host = host.split(".")[0]
@@ -125,9 +125,9 @@ class MongoDBReplSet(object):
                 short_host = 'self'
                 self_port = port
 
-                n = "{0}-{1}".format(short_host, port)
+            n = "{0}-{1}".format(short_host, port)
 
-            if not is_self and re.match('\d+\.\d+\.\d+\.\d+', host):
+            if (not is_self) and re.match('\d+\.\d+\.\d+\.\d+', host):
                 n = "{0}-{1}".format(host,port)
 
             self.submit(rs_name, t, '{0}-uptime'.format(n), m['uptime'])
@@ -137,29 +137,30 @@ class MongoDBReplSet(object):
             if m.has_key('electionTime'):
                 self.submit(rs_name, 'member','{0}.election_time'.format(n), m['electionTime'].time)
 
-        if isinstance(m['optime'], dict):
-            optime = m['optime']['ts'].time
-        else:
-            optime = m['optime'].time
+            if 'optime' in m:
+                if isinstance(m['optime'], dict):
+                    optime = m['optime']['ts'].time
+                else:
+                    optime = m['optime'].time
 
-        self.submit(rs_name, t, '{0}-optime_date'.format(n), optime)
+                self.submit(rs_name, t, '{0}-optime_date'.format(n), optime)
 
-        if is_primary:
-            primary_optime = optime
-        if is_self:
-            self_optime = optime
+                if is_primary:
+                    primary_optime = optime
+                if is_self:
+                    self_optime = optime
 
-        if m.has_key('lastHeartbeat'):
-            self.submit(rs_name, t, '{0}-last_heartbeat'.format(n), tstofloat(m['lastHeartbeat']))
+            if m.has_key('lastHeartbeat'):
+                self.submit(rs_name, t, '{0}-last_heartbeat'.format(n), tstofloat(m['lastHeartbeat']))
 
-        if m.has_key('lastHeartbeatRecv'):
-            self.submit(rs_name, t, '{0}-last_heartbeat_recv'.format(n), tstofloat(m['lastHeartbeatRecv']))
-        if m.has_key('pingMs'):
-            self.submit(rs_name, t, '{0}-ping_ms'.format(n), m['pingMs'])
+            if m.has_key('lastHeartbeatRecv'):
+                self.submit(rs_name, t, '{0}-last_heartbeat_recv'.format(n), tstofloat(m['lastHeartbeatRecv']))
+            if m.has_key('pingMs'):
+                self.submit(rs_name, t, '{0}-ping_ms'.format(n), m['pingMs'])
 
         if self_optime != None and primary_optime != None:
             n = "self-{0}".format(self_port)
-            self.submit(rs_name, t, '{0}-replication_lag'.format(n), primary_optime - self_optime)
+            self.submit(rs_name, t, '{0}-replication_lag'.format(n), int(primary_optime - self_optime))
 
     def config(self, obj):
         for node in obj.children:

@@ -33,3 +33,5 @@ opcounters                      value:DERIVE:0:U
 opcounters_repl                 value:DERIVE:0:U
 asserts                         value:COUNTER:0:U
 extra_info                      value:COUNTER:0:U
+optime                          value:COUNTER:0:U
+
