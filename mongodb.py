@@ -4,9 +4,9 @@
 
 import collectd
 from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
 from pymongo.read_preferences import ReadPreference
 from distutils.version import LooseVersion as V
-
 
 class MongoDB(object):
 
@@ -23,24 +23,39 @@ class MongoDB(object):
         self.accesses = None
         self.misses = None
 
+        collectd.info("%s: plugin started" % self.plugin_name)
+
     def submit(self, type, instance, value, db=None):
-        if db:
-            plugin_instance = '%s-%s' % (self.mongo_port, db)
-        else:
-            plugin_instance = str(self.mongo_port)
-        v = collectd.Values()
-        v.plugin = self.plugin_name
-        v.plugin_instance = plugin_instance
-        v.type = type
-        v.type_instance = instance
-        v.values = [value, ]
-        v.dispatch()
+        try:
+            if db:
+                plugin_instance = '%s-%s' % (self.mongo_port, db)
+            else:
+                plugin_instance = str(self.mongo_port)
+            v = collectd.Values()
+            v.plugin = self.plugin_name
+            v.plugin_instance = plugin_instance
+            v.type = type
+            v.type_instance = instance
+            v.values = [value, ]
+            v.dispatch()
+        except TypeError as e:
+            collectd.error("%s: %s" % (self.plugin_name, e))
+        except:
+            collectd.error("%s: Unexpected error in submit()" % self.plugin_name)
 
     def get_db_and_collection_stats(self):
-        con = MongoClient(host=self.mongo_host, port=self.mongo_port, read_preference=ReadPreference.SECONDARY)
-        db = con[self.mongo_db[0]]
-        if self.mongo_user and self.mongo_password:
-            db.authenticate(self.mongo_user, self.mongo_password)
+        try:
+            con = MongoClient(host=self.mongo_host, port=self.mongo_port, read_preference=ReadPreference.SECONDARY)
+            db = con[self.mongo_db[0]]
+            if self.mongo_user and self.mongo_password:
+                db.authenticate(self.mongo_user, self.mongo_password)
+        except ConnectionFailure as e:
+            collectd.error("%s: %s" % (self.plugin_name, e))
+            return
+        except:
+            collectd.error("%s: Unexpected error in get_db_and_collection_stats() while connecting to server" % self.plugin_name)
+            return
+
         server_status = db.command('serverStatus')
 
         version = server_status['version']
@@ -51,15 +66,16 @@ class MongoDB(object):
             self.submit('total_operations', k, v)
 
         # memory
-        for t in ['resident', 'virtual', 'mapped']:
-            self.submit('memory', t, server_status['mem'][t])
+        for t in ['resident', 'virtual', 'mapped', 'bits']:
+            if t in server_status['mem']:
+                self.submit('memory', t, server_status['mem'][t])
 
         # connections
-        self.submit('connections', 'current', server_status['connections']['current'])
+        self.submit('mongo_connections', 'current', server_status['connections']['current'])
         if 'available' in server_status['connections']:
-            self.submit('connections', 'available', server_status['connections']['available'])
+            self.submit('mongo_connections', 'available', server_status['connections']['available'])
         if 'totalCreated' in server_status['connections']:
-            self.submit('connections', 'totalCreated', server_status['connections']['totalCreated'])
+            self.submit('mongo_connections', 'totalCreated', server_status['connections']['totalCreated'])
 
         # network
         if 'network' in server_status:
@@ -67,7 +83,7 @@ class MongoDB(object):
                 self.submit('bytes', t, server_status['network'][t])
 
         # locks
-        if 'lockTime' in server_status['globalLock']:
+        if 'globalLock' in server_status and 'lockTime' in server_status['globalLock']:
             if self.lockTotalTime is not None and self.lockTime is not None:
                 if self.lockTime == server_status['globalLock']['lockTime']:
                     value = 0.0
@@ -76,7 +92,8 @@ class MongoDB(object):
                 self.submit('percent', 'lock_ratio', value)
 
             self.lockTime = server_status['globalLock']['lockTime']
-        self.lockTotalTime = server_status['globalLock']['totalTime']
+        if 'globalLock' in server_status and 'totalTime' in server_status['globalLock']:
+            self.lockTotalTime = server_status['globalLock']['totalTime']
 
         # indexes
         if 'indexCounters' in server_status:
@@ -103,7 +120,9 @@ class MongoDB(object):
             if self.mongo_user and self.mongo_password:
                 con[self.mongo_db[0]].authenticate(self.mongo_user, self.mongo_password)
             db_stats = db.command('dbstats')
-
+            if "raw" in db_stats:
+                collectd.warning("%s: This plugin is not compatible with mongos" % self.plugin_name)
+                continue
             # stats counts
             self.submit('counter', 'object_count', db_stats['objects'], mongo_db)
             self.submit('counter', 'collections', db_stats['collections'], mongo_db)
@@ -139,7 +158,7 @@ class MongoDB(object):
             elif node.key == 'Database':
                 self.mongo_db = node.values
             else:
-                collectd.warning("mongodb plugin: Unkown configuration key %s" % node.key)
+                collectd.warning("%s: Unkown configuration key %s" % (self.plugin_name, node.key))
 
 mongodb = MongoDB()
 collectd.register_read(mongodb.get_db_and_collection_stats)

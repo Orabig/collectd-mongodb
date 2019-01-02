@@ -1,5 +1,5 @@
 cache_ratio                     value:GAUGE:0:100
-connections                     value:COUNTER:0:U
+mongo_connections               value:COUNTER:0:U
 counter                         value:COUNTER:U:U
 file_size                       bytes:GAUGE:0:U
 memory                          value:GAUGE:0:281474976710656
