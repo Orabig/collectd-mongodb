@@ -8,6 +8,13 @@ from pymongo.read_preferences import ReadPreference
 from distutils.version import LooseVersion as V
 
 import traceback
+import re
+import time
+import math
+
+
+def tstofloat(d):
+    return time.mktime(d.timetuple())
 
 class MongoDB(object):
 
@@ -37,25 +44,63 @@ class MongoDB(object):
         v.values = [value, ]
         v.dispatch()
 
+    def submit_repl_info(self, replset, type, instance, value):
+        self.submit_raw(self.plugin_name, replset, type, instance, value)
+
+    def submit_raw(self, plugin_name, plugin_instance, type, instance, value):
+        v = collectd.Values()
+        v.plugin = plugin_name
+        v.plugin_instance = plugin_instance
+        v.type = type
+        v.type_instance = instance
+        v.values = [value, ]
+        v.dispatch()
+
     def get_db_and_collection_stats(self):
         con = MongoClient(host=self.mongo_host, port=self.mongo_port, read_preference=ReadPreference.SECONDARY)
-	try:
+    	try:
             db = con['admin']
             if self.mongo_user and self.mongo_password:
                 db.authenticate(self.mongo_user, self.mongo_password)
+            self.do_simple_server_status(db)
+#            self.do_server_status(db)
+#            self.do_replset_get_status(db)
 
-            self.do_server_status(db)
+#            db = con['local']
+#            if self.mongo_user and self.mongo_password:
+#                db.authenticate(self.mongo_user, self.mongo_password)
 
-            for mongo_db in self.mongo_db:
-                db = con[mongo_db]
-                if self.mongo_user and self.mongo_password:
-                    db.authenticate(self.mongo_user, self.mongo_password)
-
-	        self.do_db_status(db, mongo_db)
+#            self.do_oplog_get_metrics(db)
+            
+#            for mongo_db in self.mongo_db:
+#                db = con[mongo_db]
+#                if self.mongo_user and self.mongo_password:
+#                    db.authenticate(self.mongo_user, self.mongo_password)
+#                self.do_db_status(db, mongo_db)
         except:
             traceback.print_exc()
         finally:
             con.close()
+
+    def do_simple_server_status(self, db):
+        server_status = db.command('serverStatus')
+
+        cnx_stat = server_status['connections']
+        self.submit('cnx_count', 'current', cnx_stat['current'])
+        #self.submit('cnx_count', 'available', cnx_stat['available'])
+        self.submit('cnx_created_delta', 'created_per_second', cnx_stat['totalCreated'])
+        
+        net_stat = server_status['network']
+        for t in ['bytesIn', 'bytesOut']: #, 'physicalBytesIn', 'physicalBytesOut']:
+            self.submit('network', "{0}_per_sec".format(t), net_stat[t])
+
+        # operations
+        ops = server_status['opcounters']
+        for t in ['getmore', 'query', 'insert', 'update', 'delete']:
+            self.submit('opcounters', "{0}_per_sec".format(t), ops[t])
+
+
+
 
     def do_server_status(self, db):
         server_status = db.command('serverStatus')
@@ -69,7 +114,8 @@ class MongoDB(object):
         for k, v in server_status['opcounters'].items():
             self.submit('total_operations', k, v)
             self.submit('opcounters', k, v)
-	# repl operations
+            
+	    # repl operations
         for k, v in server_status['opcountersRepl'].items():
             self.submit('opcounters_repl', k, v)
 
@@ -92,23 +138,23 @@ class MongoDB(object):
             self.submit('connections', 'totalCreated', server_status['connections']['totalCreated'])
 
         # metrics
-	metrics = server_status['metrics']
-	for k in ['document', 'operation', 'queryExecutor', 'record']:
-            for i, val in metrics[k].items():
-	        self.submit('metrics_{0}'.format(k.lower()), "{0}".format(i.lower()), val)
+        metrics = server_status['metrics']
+        for k in ['document', 'operation', 'queryExecutor', 'record']:
+                for i, val in metrics[k].items():
+                    self.submit('metrics_{0}'.format(k.lower()), "{0}".format(i.lower()), val)
 
         # metrics/getlasterror
-	self.submit('metrics_get_last_error','wtimeouts', server_status['metrics']['getLastError']['wtimeouts'])
-	for k,v in server_status['metrics']['getLastError']['wtime'].items():
-	    self.submit('metrics_get_last_error', "wtime-{0}".format(k), v)
+        self.submit('metrics_get_last_error','wtimeouts', server_status['metrics']['getLastError']['wtimeouts'])
+        for k,v in server_status['metrics']['getLastError']['wtime'].items():
+            self.submit('metrics_get_last_error', "wtime-{0}".format(k), v)
 
         # metrics/cursor
-	self.submit('metrics_cursor','timed_out', server_status['metrics']['cursor']['timedOut'])
-	for k,v in server_status['metrics']['cursor']['open'].items():
-	    self.submit('metrics_cursor', "open-{0}".format(k), v)
+        self.submit('metrics_cursor','timed_out', server_status['metrics']['cursor']['timedOut'])
+        for k,v in server_status['metrics']['cursor']['open'].items():
+            self.submit('metrics_cursor', "open-{0}".format(k), v)
 
         # metrics/repl/executor metrics
-	if 'executor' in metrics['repl']:
+        if 'executor' in metrics['repl']:
             for k, v in metrics['repl']['executor'].items():
                 if k in ['networkInterface', 'shuttingDown']:
                     continue
@@ -172,27 +218,27 @@ class MongoDB(object):
             self.lockTotalTime = server_status['globalLock']['totalTime']
         else:
             self.submit('global_lock', 'total_time', server_status['globalLock']['totalTime'])
-	    for k in ['currentQueue','activeClients']:
+            for k in ['currentQueue','activeClients']:
                 for m, v in server_status['globalLock'][k].items():
                     self.submit('global_lock', '{0}-{1}'.format(k.lower(), m), v)
 
         if 'locks' in server_status:
             for t, stats in server_status['locks'].items():
-		typ = 'locks_{0}'.format(t.lower())
-		if t == '.':
-		  typ  = 'locks'
+                typ = 'locks_{0}'.format(t.lower())
+                if t == '.':
+                  typ  = 'locks'
                 for k, grouping in stats.items():
                     for s, v in grouping.items():
                         if s == 'r':
-			    slabel = 'intent-shared-read'
+                            slabel = 'intent-shared-read'
                         elif s == 'w':
-			    slabel = 'intent-excl-write'
+                            slabel = 'intent-excl-write'
                         elif s == 'R':
-			    slabel = 'shared-read'
+                            slabel = 'shared-read'
                         elif s == 'W':
-			    slabel = 'excl-write'
+                            slabel = 'excl-write'
 
-		        self.submit(typ, '{0}-{1}'.format(k.lower(), slabel), v)
+                        self.submit(typ, '{0}-{1}'.format(k.lower(), slabel), v)
 
 
         # indexes
@@ -238,6 +284,111 @@ class MongoDB(object):
         self.submit('file_size', 'index', db_stats['indexSize'], mongo_db)
         self.submit('file_size', 'data', db_stats['dataSize'], mongo_db)
 
+    def do_oplog_get_metrics(self, db):
+        self.do_get_replication_info_timestamps(db)
+        self.do_get_replication_info_stats(db)
+
+    def do_get_replication_info_timestamps(self, db):
+        oplog_rs = db['oplog.rs']
+
+        oplog_head = oplog_rs.find(sort=[('$natural',1)], limit=1)[0]['ts']
+        oplog_tail = oplog_rs.find(sort=[('$natural',-1)], limit=1)[0]['ts']
+
+        self.submit_repl_info('', 'oplog', 'head_timestamp', oplog_head.time)
+        self.submit_repl_info('', 'oplog', 'tail_timestamp', oplog_tail.time)
+
+        self.submit_repl_info('', 'oplog', 'time_diff', int(oplog_tail.time - oplog_head.time))
+
+    def do_get_replication_info_stats(self, db):
+
+        oplog_info = db.command({ "collStats" : "oplog.rs" })
+
+        count = oplog_info['count']
+        self.submit_repl_info('', 'oplog', 'items_total', count)
+
+        size =  oplog_info['size']
+        self.submit_repl_info('', 'oplog', 'current_size_bytes', size)
+
+        storageSize = oplog_info['storageSize']
+        self.submit_repl_info('', 'oplog', 'storage_size_bytes', storageSize)
+
+        if 'maxSize' in oplog_info:
+            maxSize = oplog_info['maxSize']
+            logSizeMB = maxSize / (1024*1024)
+            self.submit_repl_info('', 'oplog', 'log_size_mb', logSizeMB)
+
+        usedMB = size / (1024 * 1024)
+        usedMB = math.ceil(usedMB * 100) / 100
+        self.submit_repl_info('', 'oplog', 'used_mb', usedMB)
+
+    def do_replset_get_status(self, db):
+
+        rs_status = db.command({"replSetGetStatus": 1})
+
+        rs_name = rs_status['set']
+
+        self.submit_repl_info(rs_name, 'my_state', 'value', rs_status['myState'])
+
+        if rs_status.has_key('term'):
+            self.submit_repl_info(rs_name, 'term', 'value', rs_status['term'])
+
+        if rs_status.has_key('heartbeatIntervalMillis'):
+            self.submit_repl_info(rs_name, 'hearbeat_interval_ms', 'value', rs_status['heartbeatIntervalMillis'])
+
+        primary_optime = None
+        self_optime = None
+        self_port = None
+
+        self.submit_repl_info(rs_name, 'member', 'count', len(rs_status['members']))
+
+        t = 'member'
+        for m in rs_status['members']:
+            is_primary = m['stateStr'] == 'PRIMARY'
+            is_self = m.has_key('self')
+
+            host, port = m['name'].split(":")
+            short_host = host.split(".")[0]
+            if is_self:
+                short_host = 'self'
+                self_port = port
+
+            n = "{0}-{1}".format(short_host, port)
+
+            if (not is_self) and re.match('\d+\.\d+\.\d+\.\d+', host):
+                n = "{0}-{1}".format(host,port)
+
+            self.submit_repl_info(rs_name, t, '{0}-uptime'.format(n), m['uptime'])
+            self.submit_repl_info(rs_name, t, '{0}-state'.format(n), m['state'])
+            self.submit_repl_info(rs_name, t, '{0}-health'.format(n), m['health'])
+
+            if m.has_key('electionTime'):
+                self.submit_repl_info(rs_name, 'member','{0}.election_time'.format(n), m['electionTime'].time)
+
+            if 'optime' in m:
+                if isinstance(m['optime'], dict):
+                    optime = m['optime']['ts'].time
+                else:
+                    optime = m['optime'].time
+
+                self.submit_repl_info(rs_name, t, '{0}-optime_date'.format(n), optime)
+
+                if is_primary:
+                    primary_optime = optime
+                if is_self:
+                    self_optime = optime
+
+            if m.has_key('lastHeartbeat'):
+                self.submit_repl_info(rs_name, t, '{0}-last_heartbeat'.format(n), tstofloat(m['lastHeartbeat']))
+
+            if m.has_key('lastHeartbeatRecv'):
+                self.submit_repl_info(rs_name, t, '{0}-last_heartbeat_recv'.format(n), tstofloat(m['lastHeartbeatRecv']))
+            if m.has_key('pingMs'):
+                self.submit_repl_info(rs_name, t, '{0}-ping_ms'.format(n), m['pingMs'])
+
+        if self_optime != None and primary_optime != None:
+            n = "self-{0}".format(self_port)
+            self.submit_repl_info(rs_name, t, '{0}-replication_lag'.format(n), int(primary_optime - self_optime))
+
     def config(self, obj):
         for node in obj.children:
             if node.key == 'Port':
@@ -256,3 +407,5 @@ class MongoDB(object):
 mongodb = MongoDB()
 collectd.register_read(mongodb.get_db_and_collection_stats)
 collectd.register_config(mongodb.config)
+
+

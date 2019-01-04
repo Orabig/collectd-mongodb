@@ -1,4 +1,8 @@
 cache_ratio                     value:GAUGE:0:100
+network                         value:DERIVE:0:U
+operations                      value:GAUGE:0:U
+cnx_count                       value:GAUGE:0:U
+cnx_created_delta               value:DERIVE:0:U
 connections                     value:GAUGE:0:U
 counter                         value:COUNTER:U:U
 file_size                       bytes:GAUGE:0:U
