@@ -1,12 +1,15 @@
-cache_ratio                     value:GAUGE:0:100
 network                         value:DERIVE:0:U
-operations                      value:GAUGE:0:U
+opcounters                      value:DERIVE:0:U
+opcounters_repl                 value:DERIVE:0:U
 cnx_count                       value:GAUGE:0:U
 cnx_created_delta               value:DERIVE:0:U
+memory                          value:GAUGE:0:U
+page_faults                     value:COUNTER:0:U
+oplog                           value:GAUGE:0:U
+
 connections                     value:GAUGE:0:U
 counter                         value:COUNTER:U:U
 file_size                       bytes:GAUGE:0:U
-memory                          value:GAUGE:0:281474976710656
 percent                         percent:GAUGE:0:100.1
 total_operations                value:DERIVE:0:U
 collection_stats                value:COUNTER:U:U
@@ -14,7 +17,6 @@ my_state                        value:GAUGE:0:20
 term                            value:GAUGE:0:U
 hearbeat_interval_ms            value:GAUGE:0:U
 member                          value:GAUGE:0:U
-oplog                           value:GAUGE:0:U
 metrics_document                value:GAUGE:0:U
 metrics_operation               value:GAUGE:0:U
 metrics_queryexecutor           value:GAUGE:0:U
@@ -34,10 +36,7 @@ locks_oplog                     value:COUNTER:0:U
 locks_global                    value:COUNTER:0:U
 locks_collection                value:COUNTER:0:U
 locks_database                  value:COUNTER:0:U
-opcounters                      value:DERIVE:0:U
-opcounters_repl                 value:DERIVE:0:U
 asserts                         value:COUNTER:0:U
-extra_info                      value:COUNTER:0:U
 optime                          value:COUNTER:0:U
 
 

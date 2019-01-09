@@ -10,6 +10,8 @@ from distutils.version import LooseVersion as V
 import traceback
 import re
 import time
+from time import mktime
+from datetime import datetime
 import math
 
 
@@ -62,15 +64,17 @@ class MongoDB(object):
             db = con['admin']
             if self.mongo_user and self.mongo_password:
                 db.authenticate(self.mongo_user, self.mongo_password)
-            self.do_simple_server_status(db)
+            self.do_server_status(db)
+            
+            
 #            self.do_server_status(db)
 #            self.do_replset_get_status(db)
 
-#            db = con['local']
-#            if self.mongo_user and self.mongo_password:
-#                db.authenticate(self.mongo_user, self.mongo_password)
+            db = con['local']
+            #if self.mongo_user and self.mongo_password:
+            #    db.authenticate(self.mongo_user, self.mongo_password)
 
-#            self.do_oplog_get_metrics(db)
+            self.do_oplog_status(db)
             
 #            for mongo_db in self.mongo_db:
 #                db = con[mongo_db]
@@ -82,8 +86,10 @@ class MongoDB(object):
         finally:
             con.close()
 
-    def do_simple_server_status(self, db):
+    def do_server_status(self, db):
+        
         server_status = db.command('serverStatus')
+        now = (server_status['localTime'] - datetime(1970,1,1)).total_seconds()
 
         cnx_stat = server_status['connections']
         self.submit('cnx_count', 'current', cnx_stat['current'])
@@ -98,11 +104,35 @@ class MongoDB(object):
         ops = server_status['opcounters']
         for t in ['getmore', 'query', 'insert', 'update', 'delete']:
             self.submit('opcounters', "{0}_per_sec".format(t), ops[t])
+            
+        # operations replication
+        ops = server_status['opcountersRepl']
+        for t in ['getmore', 'query', 'insert', 'update', 'delete']:
+            self.submit('opcounters_repl', "{0}_per_sec".format(t), ops[t])
+
+        # memory
+        for t in ['resident', 'virtual']: # 'mapped' is useless because we don't use MMAPv1 storage engine
+            self.submit('memory', t, server_status['mem'][t])
+            
+        # page faults
+        self.submit('page_faults', 'page_faults', server_status['extra_info']['page_faults'])
+        
+        # Replication lag
+        lag = now - server_status['repl']['lastWrite']['opTime']['ts'].time
+        self.submit('metrics_repl_apply', 'replication_lag', lag)
 
 
-
-
-    def do_server_status(self, db):
+    def do_oplog_status(self, db):
+        # oplog
+        oplog_rs = db['oplog.rs']
+        oplog_head = oplog_rs.find(sort=[('$natural',1)], limit=1)[0]['ts']
+        oplog_tail = oplog_rs.find(sort=[('$natural',-1)], limit=1)[0]['ts']
+        time_diff = int(oplog_tail.time - oplog_head.time)
+        self.submit('oplog', 'width_in_second', time_diff / 1000)
+        
+        
+        
+    def do_server_status_obsolete(self, db):
         server_status = db.command('serverStatus')
 
         version = server_status['version']
@@ -119,16 +149,12 @@ class MongoDB(object):
         for k, v in server_status['opcountersRepl'].items():
             self.submit('opcounters_repl', k, v)
 
-        # memory
-        for t in ['resident', 'virtual', 'mapped']:
-            self.submit('memory', t, server_status['mem'][t])
 
         # asserts
         for k, v in server_status['asserts'].items():
             self.submit('asserts', k, v)
 
-        # page faults
-        self.submit('extra_info', 'page_faults', server_status['extra_info']['page_faults'])
+
 
         # connections
         self.submit('connections', 'current', server_status['connections']['current'])
