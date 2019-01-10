@@ -6,6 +6,7 @@ cnx_created_delta               value:DERIVE:0:U
 memory                          value:GAUGE:0:U
 page_faults                     value:COUNTER:0:U
 oplog                           value:GAUGE:0:U
+replication                     value:GAUGE:0:U
 
 connections                     value:GAUGE:0:U
 counter                         value:COUNTER:U:U

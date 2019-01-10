@@ -116,10 +116,11 @@ class MongoDB(object):
             
         # page faults
         self.submit('page_faults', 'page_faults', server_status['extra_info']['page_faults'])
+        collectd.info("fault=%d" % server_status['extra_info']['page_faults'])
         
         # Replication lag
         lag = now - server_status['repl']['lastWrite']['opTime']['ts'].time
-        self.submit('metrics_repl_apply', 'replication_lag', lag)
+        self.submit('replication', 'replication_lag', lag)
 
 
     def do_oplog_status(self, db):
